@@ -1,0 +1,176 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SubscriptionTier {
+  FREE
+  MONTHLY
+  YEARLY
+}
+
+enum PlantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SwapStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id                   String           @id @default(cuid())
+  email                String           @unique
+  emailVerified        DateTime?
+  name                 String?
+  image                String?
+  password             String?
+  role                 Role             @default(USER)
+  subscriptionTier     SubscriptionTier @default(FREE)
+  credits              Int              @default(5) // Starting credits
+  stripeCustomerId     String?          @unique
+  stripeSubscriptionId String?          @unique
+  subscriptionEndsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  accounts             Account[]
+  sessions             Session[]
+  plants               Plant[]       @relation("PlantDonor")
+  swapRequestsMade     SwapRequest[] @relation("SwapRequester")
+  swapRequestsReceived SwapRequest[] @relation("SwapOwner")
+
+  @@index([email])
+  @@index([stripeCustomerId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Plant {
+  id          String      @id @default(cuid())
+  species     String
+  commonName  String?
+  description String      @db.Text
+  healthScore Int         @default(100) // 0-100 scale
+  imageUrl    String?
+  status      PlantStatus @default(PENDING)
+  donorId     String
+  adminNotes  String?     @db.Text
+  reviewedBy  String?
+  reviewedAt  DateTime?
+
+  // Metadata
+  difficulty String? // Easy, Moderate, Hard
+  sunlight   String? // Full Sun, Partial, Shade
+  waterNeeds String? // Low, Medium, High
+  category   String? // Indoor, Outdoor, Succulent, etc.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  donor        User          @relation("PlantDonor", fields: [donorId], references: [id], onDelete: Cascade)
+  swapRequests SwapRequest[]
+
+  @@index([donorId])
+  @@index([status])
+  @@index([species])
+}
+
+model SwapRequest {
+  id          String     @id @default(cuid())
+  plantId     String
+  requesterId String
+  ownerId     String
+  status      SwapStatus @default(PENDING)
+  message     String?    @db.Text
+  ownerNotes  String?    @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  plant     Plant @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  requester User  @relation("SwapRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  owner     User  @relation("SwapOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([plantId])
+  @@index([requesterId])
+  @@index([ownerId])
+  @@index([status])
+}
+
+model CreditTransaction {
+  id                    String  @id @default(cuid())
+  userId                String
+  amount                Int // Positive for additions, negative for deductions
+  type                  String // SUBSCRIPTION, TOP_UP, SWAP_DEDUCTION, REFUND
+  description           String?
+  stripePaymentIntentId String? @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+
