@@ -1,32 +1,39 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { createSubscription } from '@/actions/subscription-actions';
-import { createCreditTopUp } from '@/actions/credit-actions';
-import { Badge } from '@/components/ui/badge';
-import { Check } from 'lucide-react';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+import { createSubscription } from "@/actions/subscription-actions";
+import { createCreditTopUp } from "@/actions/credit-actions";
+import { Badge } from "@/components/ui/badge";
+import { Check } from "lucide-react";
 
 export default function SubscriptionPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
-  async function handleSubscribe(tier: 'MONTHLY' | 'YEARLY') {
+  async function handleSubscribe(tier: "MONTHLY" | "YEARLY") {
     setIsLoading(true);
     const result = await createSubscription({ tier });
-    
+
     if (result.success && result.data?.sessionUrl) {
       window.location.href = result.data.sessionUrl;
     }
     setIsLoading(false);
   }
 
-  async function handleCreditTopUp(packageType: 'SMALL' | 'MEDIUM' | 'LARGE') {
+  async function handleCreditTopUp(packageType: "SMALL" | "MEDIUM" | "LARGE") {
     setIsLoading(true);
     const result = await createCreditTopUp({ package: packageType });
-    
+
     if (result.success && result.data?.sessionUrl) {
       window.location.href = result.data.sessionUrl;
     }
@@ -37,7 +44,9 @@ export default function SubscriptionPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Subscription & Credits</h1>
-        <p className="mt-2 text-gray-600">Choose a plan or top up your credits</p>
+        <p className="mt-2 text-gray-600">
+          Choose a plan or top up your credits
+        </p>
       </div>
 
       {/* Subscription Plans */}
@@ -77,10 +86,9 @@ export default function SubscriptionPage() {
           </Card>
 
           <Card className="border-2 border-primary">
-            <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-              <Badge>Most Popular</Badge>
-            </div>
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2"></div>
             <CardHeader>
+              <Badge>Most Popular</Badge>
               <CardTitle>Monthly</CardTitle>
               <CardDescription>For active swappers</CardDescription>
             </CardHeader>
@@ -109,9 +117,9 @@ export default function SubscriptionPage() {
               </ul>
             </CardContent>
             <CardFooter>
-              <Button 
-                className="w-full" 
-                onClick={() => handleSubscribe('MONTHLY')}
+              <Button
+                className="w-full"
+                onClick={() => handleSubscribe("MONTHLY")}
                 disabled={isLoading}
               >
                 Subscribe
@@ -149,9 +157,9 @@ export default function SubscriptionPage() {
               </ul>
             </CardContent>
             <CardFooter>
-              <Button 
+              <Button
                 className="w-full"
-                onClick={() => handleSubscribe('YEARLY')}
+                onClick={() => handleSubscribe("YEARLY")}
                 disabled={isLoading}
               >
                 Subscribe
@@ -174,13 +182,15 @@ export default function SubscriptionPage() {
               <div className="mb-4">
                 <span className="text-3xl font-bold">₹100</span>
               </div>
-              <p className="text-sm text-gray-600">Perfect for occasional swaps</p>
+              <p className="text-sm text-gray-600">
+                Perfect for occasional swaps
+              </p>
             </CardContent>
             <CardFooter>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full"
-                onClick={() => handleCreditTopUp('SMALL')}
+                onClick={() => handleCreditTopUp("SMALL")}
                 disabled={isLoading}
               >
                 Buy Now
@@ -197,13 +207,15 @@ export default function SubscriptionPage() {
               <div className="mb-4">
                 <span className="text-3xl font-bold">₹200</span>
               </div>
-              <p className="text-sm text-gray-600">Great value for regular users</p>
+              <p className="text-sm text-gray-600">
+                Great value for regular users
+              </p>
             </CardContent>
             <CardFooter>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full"
-                onClick={() => handleCreditTopUp('MEDIUM')}
+                onClick={() => handleCreditTopUp("MEDIUM")}
                 disabled={isLoading}
               >
                 Buy Now
@@ -223,10 +235,10 @@ export default function SubscriptionPage() {
               <p className="text-sm text-gray-600">Best value per credit</p>
             </CardContent>
             <CardFooter>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full"
-                onClick={() => handleCreditTopUp('LARGE')}
+                onClick={() => handleCreditTopUp("LARGE")}
                 disabled={isLoading}
               >
                 Buy Now
