@@ -1,44 +1,73 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { createPlant } from '@/actions/plant-actions';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { createPlant } from "@/actions/plant-actions";
+import { Difficulty, Sunlight, WaterNeeds } from "@prisma/client";
+import { SunlightMap } from "@/lib/enum-mappers";
+
+/* ---------- helper ---------- */
+function asEnum<T extends readonly string[]>(
+  value: FormDataEntryValue | null,
+  allowed: T
+): T[number] | undefined {
+  return allowed.includes(value as T[number])
+    ? (value as T[number])
+    : undefined;
+}
 
 export default function NewPlantPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setIsLoading(true);
-    setError('');
+    setError("");
 
     const formData = new FormData(e.currentTarget);
-    
+
     const result = await createPlant({
-      species: formData.get('species') as string,
-      commonName: formData.get('commonName') as string || undefined,
-      description: formData.get('description') as string,
-      healthScore: parseInt(formData.get('healthScore') as string),
-      imageUrl: formData.get('imageUrl') as string || undefined,
-      difficulty: formData.get('difficulty') as string || undefined,
-      sunlight: formData.get('sunlight') as string || undefined,
-      waterNeeds: formData.get('waterNeeds') as string || undefined,
-      category: formData.get('category') as string || undefined,
+      species: formData.get("species") as string,
+      commonName: (formData.get("commonName") as string) || undefined,
+      description: formData.get("description") as string,
+      healthScore: parseInt(formData.get("healthScore") as string),
+      imageUrl: (formData.get("imageUrl") as string) || undefined,
+      difficulty: asEnum(formData.get("difficulty"), [
+        Difficulty.Easy,
+        Difficulty.Moderate,
+        Difficulty.Hard,
+      ]),
+
+      sunlight: (() => {
+        const value = asEnum(formData.get("sunlight"), [
+          Sunlight.Full_Sun,
+          Sunlight.Partial,
+          Sunlight.Shade,
+        ]);
+        return value ? SunlightMap[value] : undefined;
+      })(),
+
+      waterNeeds: asEnum(formData.get("waterNeeds"), [
+        WaterNeeds.Low,
+        WaterNeeds.Medium,
+        WaterNeeds.High,
+      ]),
+      category: (formData.get("category") as string) || undefined,
     });
 
     if (result.success) {
-      router.push('/plants');
+      router.push("/plants");
       router.refresh();
     } else {
-      setError(result.error || 'Failed to create plant');
+      setError(result.error || "Failed to create plant");
     }
-    
+
     setIsLoading(false);
   }
 
@@ -182,7 +211,7 @@ export default function NewPlantPage() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isLoading} className="flex-1">
-                {isLoading ? 'Submitting...' : 'Submit for Approval'}
+                {isLoading ? "Submitting..." : "Submit for Approval"}
               </Button>
             </div>
           </form>

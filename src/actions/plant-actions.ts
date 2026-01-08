@@ -1,15 +1,22 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import {
   createPlantSchema,
   updatePlantSchema,
   type CreatePlantInput,
   type UpdatePlantInput,
-} from '@/lib/validations';
-import { ActionResponse, SafePlant } from '@/types';
+} from "@/lib/validations";
+import { ActionResponse, SafePlant } from "@/types";
+import {
+  SunlightToPrisma,
+  DifficultyToPrisma,
+  WaterNeedsToPrisma,
+} from "@/lib/enum-mappers";
+
+import { toSafePlant } from "@/lib/safe-mappers";
 
 export async function createPlant(
   input: CreatePlantInput
@@ -17,16 +24,34 @@ export async function createPlant(
   try {
     const session = await auth();
     if (!session?.user) {
-      return { success: false, error: 'Unauthorized' };
+      return { success: false, error: "Unauthorized" };
     }
 
     const validatedData = createPlantSchema.parse(input);
 
     const plant = await prisma.plant.create({
       data: {
-        ...validatedData,
+        species: validatedData.species,
+        description: validatedData.description,
+        healthScore: validatedData.healthScore,
+        commonName: validatedData.commonName,
+        imageUrl: validatedData.imageUrl,
+        category: validatedData.category,
+
+        difficulty: validatedData.difficulty
+          ? DifficultyToPrisma[validatedData.difficulty]
+          : undefined,
+
+        sunlight: validatedData.sunlight
+          ? SunlightToPrisma[validatedData.sunlight]
+          : undefined,
+
+        waterNeeds: validatedData.waterNeeds
+          ? WaterNeedsToPrisma[validatedData.waterNeeds]
+          : undefined,
+
         donorId: session.user.id,
-        status: 'PENDING',
+        status: "PENDING",
       },
       include: {
         donor: {
@@ -39,18 +64,18 @@ export async function createPlant(
       },
     });
 
-    revalidatePath('/plants');
-    revalidatePath('/dashboard');
+    revalidatePath("/plants");
+    revalidatePath("/dashboard");
 
     return {
       success: true,
-      data: plant as SafePlant,
+      data: toSafePlant(plant),
     };
   } catch (error) {
-    console.error('Create plant error:', error);
+    console.error("Create plant error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create plant',
+      error: error instanceof Error ? error.message : "Failed to create plant",
     };
   }
 }
@@ -61,7 +86,7 @@ export async function updatePlant(
   try {
     const session = await auth();
     if (!session?.user) {
-      return { success: false, error: 'Unauthorized' };
+      return { success: false, error: "Unauthorized" };
     }
 
     const validatedData = updatePlantSchema.parse(input);
@@ -74,16 +99,32 @@ export async function updatePlant(
     });
 
     if (!existingPlant) {
-      return { success: false, error: 'Plant not found' };
+      return { success: false, error: "Plant not found" };
     }
 
-    if (existingPlant.donorId !== session.user.id && session.user.role !== 'ADMIN') {
-      return { success: false, error: 'Forbidden' };
+    if (
+      existingPlant.donorId !== session.user.id &&
+      session.user.role !== "ADMIN"
+    ) {
+      return { success: false, error: "Forbidden" };
     }
 
     const plant = await prisma.plant.update({
       where: { id },
-      data: updateData,
+      data: {
+        ...updateData,
+        difficulty: updateData.difficulty
+          ? DifficultyToPrisma[updateData.difficulty]
+          : undefined,
+
+        sunlight: updateData.sunlight
+          ? SunlightToPrisma[updateData.sunlight]
+          : undefined,
+
+        waterNeeds: updateData.waterNeeds
+          ? WaterNeedsToPrisma[updateData.waterNeeds]
+          : undefined,
+      },
       include: {
         donor: {
           select: {
@@ -95,18 +136,18 @@ export async function updatePlant(
       },
     });
 
-    revalidatePath('/plants');
+    revalidatePath("/plants");
     revalidatePath(`/plants/${id}`);
 
     return {
       success: true,
-      data: plant as SafePlant,
+      data: toSafePlant(plant),
     };
   } catch (error) {
-    console.error('Update plant error:', error);
+    console.error("Update plant error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to update plant',
+      error: error instanceof Error ? error.message : "Failed to update plant",
     };
   }
 }
@@ -115,7 +156,7 @@ export async function deletePlant(plantId: string): Promise<ActionResponse> {
   try {
     const session = await auth();
     if (!session?.user) {
-      return { success: false, error: 'Unauthorized' };
+      return { success: false, error: "Unauthorized" };
     }
 
     const plant = await prisma.plant.findUnique({
@@ -124,26 +165,26 @@ export async function deletePlant(plantId: string): Promise<ActionResponse> {
     });
 
     if (!plant) {
-      return { success: false, error: 'Plant not found' };
+      return { success: false, error: "Plant not found" };
     }
 
-    if (plant.donorId !== session.user.id && session.user.role !== 'ADMIN') {
-      return { success: false, error: 'Forbidden' };
+    if (plant.donorId !== session.user.id && session.user.role !== "ADMIN") {
+      return { success: false, error: "Forbidden" };
     }
 
     await prisma.plant.delete({
       where: { id: plantId },
     });
 
-    revalidatePath('/plants');
-    revalidatePath('/dashboard');
+    revalidatePath("/plants");
+    revalidatePath("/dashboard");
 
     return { success: true };
   } catch (error) {
-    console.error('Delete plant error:', error);
+    console.error("Delete plant error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete plant',
+      error: error instanceof Error ? error.message : "Failed to delete plant",
     };
   }
 }
@@ -152,7 +193,7 @@ export async function getMyPlants(): Promise<ActionResponse<SafePlant[]>> {
   try {
     const session = await auth();
     if (!session?.user) {
-      return { success: false, error: 'Unauthorized' };
+      return { success: false, error: "Unauthorized" };
     }
 
     const plants = await prisma.plant.findMany({
@@ -166,23 +207,25 @@ export async function getMyPlants(): Promise<ActionResponse<SafePlant[]>> {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return {
       success: true,
-      data: plants as SafePlant[],
+      data: plants.map(toSafePlant),
     };
   } catch (error) {
-    console.error('Get my plants error:', error);
+    console.error("Get my plants error:", error);
     return {
       success: false,
-      error: 'Failed to fetch plants',
+      error: "Failed to fetch plants",
     };
   }
 }
 
-export async function getPlantById(plantId: string): Promise<ActionResponse<SafePlant>> {
+export async function getPlantById(
+  plantId: string
+): Promise<ActionResponse<SafePlant>> {
   try {
     const plant = await prisma.plant.findUnique({
       where: { id: plantId },
@@ -198,18 +241,18 @@ export async function getPlantById(plantId: string): Promise<ActionResponse<Safe
     });
 
     if (!plant) {
-      return { success: false, error: 'Plant not found' };
+      return { success: false, error: "Plant not found" };
     }
 
     return {
       success: true,
-      data: plant as SafePlant,
+      data: toSafePlant(plant),
     };
   } catch (error) {
-    console.error('Get plant error:', error);
+    console.error("Get plant error:", error);
     return {
       success: false,
-      error: 'Failed to fetch plant',
+      error: "Failed to fetch plant",
     };
   }
 }

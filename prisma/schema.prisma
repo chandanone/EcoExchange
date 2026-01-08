@@ -39,6 +39,24 @@ enum SwapStatus {
   CANCELLED
 }
 
+enum Difficulty {
+  Easy
+  Moderate
+  Hard
+}
+
+enum Sunlight {
+  Full_Sun
+  Partial
+  Shade
+}
+
+enum WaterNeeds {
+  Low
+  Medium
+  High
+}
+
 model User {
   id                   String           @id @default(cuid())
   email                String           @unique
@@ -119,9 +137,9 @@ model Plant {
   reviewedAt  DateTime?
 
   // Metadata
-  difficulty String? // Easy, Moderate, Hard
-  sunlight   String? // Full Sun, Partial, Shade
-  waterNeeds String? // Low, Medium, High
+  difficulty Difficulty? // Easy, Moderate, Hard
+  sunlight   Sunlight? // Full Sun, Partial, Shade
+  waterNeeds WaterNeeds? // Low, Medium, High
   category   String? // Indoor, Outdoor, Succulent, etc.
 
   createdAt DateTime @default(now())
