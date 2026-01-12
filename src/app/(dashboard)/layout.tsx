@@ -98,12 +98,13 @@ export default async function DashboardLayout({
           </nav>
           {/* User Profile & Sign Out */}
           <div className="flex items-center gap-4">
-            {/* Credits - Hidden on very small screens to save space */}
-            <div className="hidden xs:flex flex-col text-right">
-              <p className="text-xs font-semibold text-gray-900">
+            {/* User Info & Credits */}
+            <div className="flex flex-col text-right">
+              <p className="text-sm font-semibold leading-none text-gray-900">
                 {session.user.name}
               </p>
-              <p className="text-[10px] text-primary font-bold uppercase tracking-wider">
+              {/* Removed 'hidden' classes - this will now always show */}
+              <p className="text-xs font-bold text-primary mt-1">
                 {session.user.credits} credits
               </p>
             </div>

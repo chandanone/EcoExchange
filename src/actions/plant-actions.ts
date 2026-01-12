@@ -43,7 +43,9 @@ export async function createPlant(
           : undefined,
 
         sunlight: validatedData.sunlight
-          ? SunlightToPrisma[validatedData.sunlight]
+          ? SunlightToPrisma[
+              validatedData.sunlight as keyof typeof SunlightToPrisma
+            ]
           : undefined,
 
         waterNeeds: validatedData.waterNeeds
@@ -113,16 +115,22 @@ export async function updatePlant(
       where: { id },
       data: {
         ...updateData,
-        difficulty: updateData.difficulty
-          ? DifficultyToPrisma[updateData.difficulty]
+        sunlight: updateData.sunlight
+          ? SunlightToPrisma[
+              updateData.sunlight as keyof typeof SunlightToPrisma
+            ]
           : undefined,
 
-        sunlight: updateData.sunlight
-          ? SunlightToPrisma[updateData.sunlight]
+        difficulty: updateData.difficulty
+          ? DifficultyToPrisma[
+              updateData.difficulty as keyof typeof DifficultyToPrisma
+            ]
           : undefined,
 
         waterNeeds: updateData.waterNeeds
-          ? WaterNeedsToPrisma[updateData.waterNeeds]
+          ? WaterNeedsToPrisma[
+              updateData.waterNeeds as keyof typeof WaterNeedsToPrisma
+            ]
           : undefined,
       },
       include: {
