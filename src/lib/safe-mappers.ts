@@ -1,7 +1,6 @@
-// src/lib/safe-mappers.ts
-import { Prisma, Sunlight } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { SafePlant } from "@/types";
-import { SunlightMap } from "@/lib/enum-mappers";
+import { SunlightLabelMap } from "@/lib/enum-mappers";
 
 type PlantWithDonor = Prisma.PlantGetPayload<{
   include: {
@@ -25,7 +24,7 @@ export function toSafePlant(plant: PlantWithDonor): SafePlant {
     imageUrl: plant.imageUrl,
     status: plant.status,
     difficulty: plant.difficulty,
-    sunlight: plant.sunlight ? SunlightMap[plant.sunlight] : null,
+    sunlight: plant.sunlight ? SunlightLabelMap[plant.sunlight] : null,
     waterNeeds: plant.waterNeeds,
     category: plant.category,
     createdAt: plant.createdAt,

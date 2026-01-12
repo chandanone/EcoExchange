@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { createPlant } from "@/actions/plant-actions";
 import { Difficulty, Sunlight, WaterNeeds } from "@prisma/client";
-import { SunlightMap } from "@/lib/enum-mappers";
+import { SunlightToPrisma } from "@/lib/enum-mappers";
 
 /* ---------- helper ---------- */
 function asEnum<T extends readonly string[]>(
@@ -45,12 +45,10 @@ export default function NewPlantPage() {
       ]),
 
       sunlight: (() => {
-        const value = asEnum(formData.get("sunlight"), [
-          Sunlight.Full_Sun,
-          Sunlight.Partial,
-          Sunlight.Shade,
-        ]);
-        return value ? SunlightMap[value] : undefined;
+        const label = formData.get("sunlight") as string | null;
+        return label
+          ? SunlightToPrisma[label as keyof typeof SunlightToPrisma]
+          : undefined;
       })(),
 
       waterNeeds: asEnum(formData.get("waterNeeds"), [
