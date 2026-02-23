@@ -179,16 +179,24 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     if (!tier) tier = subscription.metadata?.tier;
   }
 
-  // 1.5 Safety Fallback: Use amount paid to confirm tier (Most resilient against metadata/price ID sync issues)
-  const amountPaid = invoice.amount_paid; // in paise (e.g., 100000 = ₹1000)
-  console.log(`Amount paid: ${amountPaid}`);
+  const amountPaid = invoice.amount_paid; // in paise
 
-  if (amountPaid >= 100000) {
-    console.log("Amount matches YEARLY plan (>= ₹1000). Forcing tier to YEARLY.");
+  // 1.5 Tier Resolution: Money is the source of truth
+  // ₹1000 = 100000 paise (Yearly)
+  // ₹300 = 30000 paise (Monthly)
+
+  if (amountPaid >= 90000) {
+    console.log("Amount matches YEARLY plan (>= ₹900). Setting tier to YEARLY.");
     tier = "YEARLY";
-  } else if (amountPaid >= 30000 && amountPaid < 100000) {
-    console.log("Amount matches MONTHLY plan (>= ₹300). Forcing tier to MONTHLY.");
+  } else if (amountPaid >= 25000 && amountPaid < 90000) {
+    console.log("Amount matches MONTHLY plan (>= ₹250). Setting tier to MONTHLY.");
     tier = "MONTHLY";
+  }
+
+  // If amount is ambiguous (e.g. a discount applied), fallback to metadata/Price IDs
+  if (!tier) {
+    console.log("Amount ambiguous, falling back to Metadata/Price ID resolution");
+    // (Existing tier resolution from lines 152-180 already populated 'tier' if possible)
   }
 
   console.log(`Final resolution: userId=${userId}, tier=${tier}, foundFromPrice=${foundTierFromPrice}, amountPaid=${amountPaid}`);
