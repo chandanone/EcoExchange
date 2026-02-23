@@ -1,11 +1,14 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
-import { stripe, SUBSCRIPTION_PRICES } from '@/lib/stripe';
-import { createSubscriptionSchema, type CreateSubscriptionInput } from '@/lib/validations';
-import { ActionResponse } from '@/types';
+import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { stripe, SUBSCRIPTION_PRICES } from "@/lib/stripe";
+import {
+  createSubscriptionSchema,
+  type CreateSubscriptionInput,
+} from "@/lib/validations";
+import { ActionResponse } from "@/types";
 
 export async function createSubscription(
   input: CreateSubscriptionInput
@@ -13,7 +16,7 @@ export async function createSubscription(
   try {
     const session = await auth();
     if (!session?.user) {
-      return { success: false, error: 'Unauthorized' };
+      return { success: false, error: "Unauthorized" };
     }
 
     const validatedData = createSubscriptionSchema.parse(input);
@@ -45,14 +48,16 @@ export async function createSubscription(
 
     // Create Stripe Checkout Session
     const priceId =
-      validatedData.tier === 'MONTHLY'
+      validatedData.tier === "MONTHLY"
         ? SUBSCRIPTION_PRICES.MONTHLY
         : SUBSCRIPTION_PRICES.YEARLY;
 
+    console.log(`Creating subscription session: tier=${validatedData.tier}, priceId=${priceId}`);
+
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
-      mode: 'subscription',
-      payment_method_types: ['card'],
+      mode: "subscription",
+      payment_method_types: ["card"],
       line_items: [
         {
           price: priceId,
@@ -63,7 +68,14 @@ export async function createSubscription(
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription?cancelled=true`,
       metadata: {
         userId: session.user.id,
-        tier: validatedData.tier,
+      },
+      // CRITICAL: Metadata for the Subscription (recurring use)
+      // This ensures invoice.paid always knows which userId to credit
+      subscription_data: {
+        metadata: {
+          userId: session.user.id,
+          tier: validatedData.tier,
+        },
       },
     });
 
@@ -72,10 +84,13 @@ export async function createSubscription(
       data: { sessionUrl: checkoutSession.url! },
     };
   } catch (error) {
-    console.error('Create subscription error:', error);
+    console.error("Create subscription error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create subscription',
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to create subscription",
     };
   }
 }
@@ -84,7 +99,7 @@ export async function cancelSubscription(): Promise<ActionResponse> {
   try {
     const session = await auth();
     if (!session?.user) {
-      return { success: false, error: 'Unauthorized' };
+      return { success: false, error: "Unauthorized" };
     }
 
     const user = await prisma.user.findUnique({
@@ -93,21 +108,24 @@ export async function cancelSubscription(): Promise<ActionResponse> {
     });
 
     if (!user?.stripeSubscriptionId) {
-      return { success: false, error: 'No active subscription found' };
+      return { success: false, error: "No active subscription found" };
     }
 
     await stripe.subscriptions.update(user.stripeSubscriptionId, {
       cancel_at_period_end: true,
     });
 
-    revalidatePath('/subscription');
+    revalidatePath("/subscription");
 
     return { success: true };
   } catch (error) {
-    console.error('Cancel subscription error:', error);
+    console.error("Cancel subscription error:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to cancel subscription',
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to cancel subscription",
     };
   }
 }
@@ -123,7 +141,7 @@ export async function getSubscriptionDetails(): Promise<
   try {
     const session = await auth();
     if (!session?.user) {
-      return { success: false, error: 'Unauthorized' };
+      return { success: false, error: "Unauthorized" };
     }
 
     const user = await prisma.user.findUnique({
@@ -136,18 +154,20 @@ export async function getSubscriptionDetails(): Promise<
     });
 
     if (!user) {
-      return { success: false, error: 'User not found' };
+      return { success: false, error: "User not found" };
     }
 
     let subscriptionDetails = {
       tier: user.subscriptionTier,
-      status: 'active',
+      status: "active",
       currentPeriodEnd: user.subscriptionEndsAt || undefined,
       cancelAtPeriodEnd: false,
     };
 
     if (user.stripeSubscriptionId) {
-      const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+      const subscription = await stripe.subscriptions.retrieve(
+        user.stripeSubscriptionId
+      );
       subscriptionDetails = {
         tier: user.subscriptionTier,
         status: subscription.status,
@@ -161,10 +181,10 @@ export async function getSubscriptionDetails(): Promise<
       data: subscriptionDetails,
     };
   } catch (error) {
-    console.error('Get subscription details error:', error);
+    console.error("Get subscription details error:", error);
     return {
       success: false,
-      error: 'Failed to fetch subscription details',
+      error: "Failed to fetch subscription details",
     };
   }
 }
@@ -175,7 +195,7 @@ export async function createBillingPortalSession(): Promise<
   try {
     const session = await auth();
     if (!session?.user) {
-      return { success: false, error: 'Unauthorized' };
+      return { success: false, error: "Unauthorized" };
     }
 
     const user = await prisma.user.findUnique({
@@ -184,7 +204,7 @@ export async function createBillingPortalSession(): Promise<
     });
 
     if (!user?.stripeCustomerId) {
-      return { success: false, error: 'No Stripe customer found' };
+      return { success: false, error: "No Stripe customer found" };
     }
 
     const portalSession = await stripe.billingPortal.sessions.create({
@@ -197,10 +217,10 @@ export async function createBillingPortalSession(): Promise<
       data: { sessionUrl: portalSession.url },
     };
   } catch (error) {
-    console.error('Create portal session error:', error);
+    console.error("Create portal session error:", error);
     return {
       success: false,
-      error: 'Failed to create billing portal session',
+      error: "Failed to create billing portal session",
     };
   }
 }

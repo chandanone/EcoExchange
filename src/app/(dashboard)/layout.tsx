@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,14 @@ export default async function DashboardLayout({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
+  // Fetch the latest user data from DB to ensure credits are up to date
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { credits: true, role: true, name: true },
+  });
+
+  if (!user) redirect("/login");
+
   // Icons are now strings, which are "Plain Objects"
   const navLinks = [
     { href: "/dashboard", label: "Dashboard", iconName: "Home" },
@@ -57,7 +66,7 @@ export default async function DashboardLayout({
             {/* Pass the serialized links array */}
             <MobileNav
               links={navLinks}
-              isAdmin={session.user.role === "ADMIN"}
+              isAdmin={user.role === "ADMIN"}
             />
 
             <Link href="/dashboard" className="flex items-center gap-2">
@@ -86,7 +95,7 @@ export default async function DashboardLayout({
                 </Link>
               );
             })}
-            {session.user.role === "ADMIN" && (
+            {user.role === "ADMIN" && (
               <Link
                 href="/admin/approval"
                 className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-primary"
@@ -101,11 +110,11 @@ export default async function DashboardLayout({
             {/* User Info & Credits */}
             <div className="flex flex-col text-right">
               <p className="text-sm font-semibold leading-none text-gray-900">
-                {session.user.name}
+                {user.name}
               </p>
               {/* Removed 'hidden' classes - this will now always show */}
               <p className="text-xs font-bold text-primary mt-1">
-                {session.user.credits} credits
+                {user.credits} credits
               </p>
             </div>
 

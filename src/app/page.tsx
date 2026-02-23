@@ -1,6 +1,9 @@
+"use client";
+
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Leaf, Shield, CreditCard, Users } from 'lucide-react';
+import { Leaf, Shield, CreditCard, Users, Heart } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export default function LandingPage() {
   return (
@@ -143,8 +146,30 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t bg-gray-50 py-8">
-        <div className="container mx-auto px-4 text-center text-gray-600">
+        <div className="container mx-auto px-4 flex flex-col items-center gap-4 text-center text-gray-600">
           <p>&copy; 2026 EcoExchange. All rights reserved.</p>
+          <div className="flex items-center gap-2 text-sm font-bold text-zinc-500">
+            Crafted with
+            <div className="relative flex items-center justify-center w-4 h-4">
+              <Heart className="w-4 h-4 text-red-500 hover:scale-110 transition-transform" />
+              <motion.div
+                animate={{
+                  opacity: [0, 1, 0],
+                  scale: [1, 1.2, 1]
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 2,
+                  times: [0, 0.5, 1],
+                  repeatDelay: 1
+                }}
+                className="absolute inset-0 flex items-center justify-center"
+              >
+                <Heart className="w-4 h-4 text-red-500 fill-red-500" />
+              </motion.div>
+            </div>
+            by <span className="text-zinc-900 font-black tracking-tight hover:text-blue-600 transition-colors cursor-pointer">CharuAILabs</span>
+          </div>
         </div>
       </footer>
     </div>
