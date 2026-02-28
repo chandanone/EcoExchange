@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getPendingPlants, approvePlant, bulkApprovePlants } from '@/actions/admin-actions';
-import { PendingPlant } from '@/types';
+import { ActionResponse, PendingPlant } from '@/types';
 import { Check, X, Leaf } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function AdminApprovalPage() {
   const [plants, setPlants] = useState<PendingPlant[]>([]);
@@ -31,22 +32,28 @@ export default function AdminApprovalPage() {
   async function handleApprove(plantId: string, status: 'APPROVED' | 'REJECTED') {
     setProcessingId(plantId);
     const result = await approvePlant({ plantId, status });
-    
+
     if (result.success) {
       setPlants(plants.filter((p) => p.id !== plantId));
+      toast.success(`Plant ${status === 'APPROVED' ? 'approved' : 'rejected'} successfully`);
+    } else {
+      toast.error(result.error || 'Failed to update plant status');
     }
     setProcessingId(null);
   }
 
   async function handleBulkApprove() {
     if (selectedIds.size === 0) return;
-    
+
     setIsLoading(true);
     const result = await bulkApprovePlants(Array.from(selectedIds));
-    
+
     if (result.success) {
       setPlants(plants.filter((p) => !selectedIds.has(p.id)));
+      toast.success(`${selectedIds.size} plants approved successfully`);
       setSelectedIds(new Set());
+    } else {
+      toast.error(result.error || 'Bulk approval failed');
     }
     setIsLoading(false);
   }
@@ -161,7 +168,7 @@ export default function AdminApprovalPage() {
                       <p className="mb-4 text-sm text-gray-700 line-clamp-3">
                         {plant.description}
                       </p>
-                      
+
                       <div className="mb-4 grid grid-cols-2 gap-2 text-sm">
                         {plant.difficulty && (
                           <div>

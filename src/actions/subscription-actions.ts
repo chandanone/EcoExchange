@@ -61,6 +61,21 @@ export async function createSubscription(
             : SUBSCRIPTION_PRICES.YEARLY;
 
           // Block if user already has the same plan
+          const isExistingYearly = existingPriceId === SUBSCRIPTION_PRICES.YEARLY;
+          const currentEnd = existingSub.current_period_end * 1000;
+          const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
+          const isLastMonth = (currentEnd - Date.now()) <= thirtyDaysInMs;
+
+          // NEW STRICT POLICY: If you are on Yearly, you can't buy ANYTHING until last 30 days
+          if (isExistingYearly && !isLastMonth) {
+            const daysLeft = Math.ceil((currentEnd - Date.now()) / (1000 * 60 * 60 * 24));
+            return {
+              success: false,
+              error: `You have an active Yearly plan with ${daysLeft} days left. You can change or renew your plan only during the last 30 days.`,
+            };
+          }
+
+          // Block if user already has the exact same plan (for Monthly)
           if (existingPriceId === requestedPriceId) {
             return {
               success: false,

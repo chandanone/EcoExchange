@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { approvalSchema, type ApprovalInput } from '@/lib/validations';
-import { ActionResponse, PendingPlant } from '@/types';
+import { ActionResponse, PendingPlant, PaymentHistoryRecord, SafeUser } from '@/types';
 import { PlantStatus } from '@prisma/client';
 
 export async function getPendingPlants(): Promise<ActionResponse<PendingPlant[]>> {
@@ -144,6 +144,65 @@ export async function getAdminStats(): Promise<
     return {
       success: false,
       error: 'Failed to fetch stats',
+    };
+  }
+}
+
+export async function getUsers(): Promise<ActionResponse<SafeUser[]>> {
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== 'ADMIN') {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        subscriptionTier: true,
+        credits: true,
+        createdAt: true,
+        image: true,
+      },
+    });
+
+    return {
+      success: true,
+      data: users as SafeUser[],
+    };
+  } catch (error) {
+    console.error('Get users error:', error);
+    return {
+      success: false,
+      error: 'Failed to fetch users',
+    };
+  }
+}
+
+export async function getUserPaymentHistory(userId: string): Promise<ActionResponse<PaymentHistoryRecord[]>> {
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== 'ADMIN') {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const transactions = await prisma.creditTransaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: transactions as PaymentHistoryRecord[],
+    };
+  } catch (error) {
+    console.error('Get user payment history error:', error);
+    return {
+      success: false,
+      error: 'Failed to fetch payment history',
     };
   }
 }

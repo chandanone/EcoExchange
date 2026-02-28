@@ -36,6 +36,7 @@
     "next-auth": "5.0.0-beta.30",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "sonner": "^2.0.7",
     "stripe": "^17.5.0",
     "tailwind-merge": "^2.2.0",
     "tailwindcss-animate": "^1.0.7",

@@ -13,6 +13,8 @@ import {
   Shield,
   RefreshCw,
   ArrowLeftRight,
+  History,
+  Users,
 } from "lucide-react";
 import MobileNav from "@/components/dashboard/mobile-nav"; // We will create this below
 
@@ -28,6 +30,10 @@ function getIcon(name: string) {
       return ArrowLeftRight;
     case "CreditCard":
       return CreditCard;
+    case "History":
+      return History;
+    case "Users":
+      return Users;
     default:
       return Home;
   }
@@ -56,6 +62,7 @@ export default async function DashboardLayout({
     { href: "/marketplace", label: "Marketplace", iconName: "ShoppingBag" },
     { href: "/swap-requests", label: "Swaps", iconName: "ArrowLeftRight" },
     { href: "/subscription", label: "Subscription", iconName: "CreditCard" },
+    { href: "/payments", label: "Transactions", iconName: "History" },
   ];
 
   return (
@@ -96,13 +103,22 @@ export default async function DashboardLayout({
               );
             })}
             {user.role === "ADMIN" && (
-              <Link
-                href="/admin/approval"
-                className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-primary"
-              >
-                <Shield className="h-4 w-4" />
-                Admin
-              </Link>
+              <>
+                <Link
+                  href="/admin/users"
+                  className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-primary transition-colors"
+                >
+                  <Users className="h-4 w-4" />
+                  Users
+                </Link>
+                <Link
+                  href="/admin/approval"
+                  className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-primary transition-colors"
+                >
+                  <Shield className="h-4 w-4" />
+                  Approvals
+                </Link>
+              </>
             )}
           </nav>
           {/* User Profile & Sign Out */}

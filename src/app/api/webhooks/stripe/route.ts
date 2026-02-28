@@ -108,12 +108,22 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   if (session.mode === "subscription") {
     // Handle subscription checkout
     const subscriptionId = session.subscription as string;
-    await prisma.user.update({
+
+    // Only update if no subscription exists OR if existing one is FREE
+    // This prevents overwriting with a future subscription ID that would break the current tier resolution
+    const user = await prisma.user.findUnique({
       where: { id: userId },
-      data: {
-        stripeSubscriptionId: subscriptionId,
-      },
+      select: { stripeSubscriptionId: true, subscriptionTier: true }
     });
+
+    if (!user?.stripeSubscriptionId || user.subscriptionTier === 'FREE') {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          stripeSubscriptionId: subscriptionId,
+        },
+      });
+    }
   } else if (session.mode === "payment") {
     // Handle one-time credit purchase
     const credits = parseInt(session.metadata?.credits || "0");
@@ -276,26 +286,46 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 
   // 4. Atomic Database Update
   try {
-    await prisma.$transaction([
-      prisma.user.update({
+    const line = invoice.lines.data[0];
+    const validityStart = line ? new Date(line.period.start * 1000) : null;
+    const validityEnd = line ? new Date(line.period.end * 1000) : null;
+
+    // CRITICAL: Only update Tier and Credits if a real payment happened
+    if (amountPaid > 0) {
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: userId },
+          data: {
+            subscriptionEndsAt: validityEnd,
+            subscriptionTier: tier as any,
+            credits: { increment: creditsToAdd },
+            stripeSubscriptionId: subscriptionId,
+          },
+        }),
+        prisma.creditTransaction.create({
+          data: {
+            userId,
+            amount: creditsToAdd,
+            type: "SUBSCRIPTION",
+            stripePaymentIntentId: paymentIntentId,
+            validityStart,
+            validityEnd,
+            description: `Subscription (${tier}) activated - ₹${amountPaid / 100} paid - ${creditsToAdd} credits added`,
+          },
+        }),
+      ]);
+      console.log(`Successfully credited ${creditsToAdd} to user ${userId} for paid invoice ${invoice.id}`);
+    } else {
+      console.log(`Zero-amount invoice ${invoice.id} for user ${userId}. Skipping tier/credit update to preserve existing plan.`);
+      const existingUser = await prisma.user.findUnique({ where: { id: userId }, select: { subscriptionTier: true } });
+      await prisma.user.update({
         where: { id: userId },
         data: {
-          subscriptionEndsAt: new Date(invoice.lines.data[0].period.end * 1000),
-          subscriptionTier: tier as any, // Casts to your Prisma Enum
-          credits: { increment: creditsToAdd },
-        },
-      }),
-      prisma.creditTransaction.create({
-        data: {
-          userId,
-          amount: creditsToAdd,
-          type: "SUBSCRIPTION",
-          stripePaymentIntentId: paymentIntentId,
-          description: `Subscription (${tier}) activated - ₹${amountPaid / 100} paid - ${creditsToAdd} credits added`,
-        },
-      }),
-    ]);
-    console.log(`Successfully credited ${creditsToAdd} to user ${userId}`);
+          stripeSubscriptionId: subscriptionId,
+          ...(existingUser?.subscriptionTier === 'FREE' ? { subscriptionEndsAt: validityEnd } : {})
+        }
+      });
+    }
   } catch (error) {
     console.error("Failed to update database for invoice:", invoice.id, error);
     throw error; // Re-throw so Stripe knows the webhook failed and will retry

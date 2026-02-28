@@ -15,6 +15,7 @@ import { createSubscription } from "@/actions/subscription-actions";
 import { createCreditTopUp } from "@/actions/credit-actions";
 import { Badge } from "@/components/ui/badge";
 import { Check } from "lucide-react";
+import { toast } from "sonner";
 
 export default function SubscriptionPage() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function SubscriptionPage() {
     if (result.success && result.data?.sessionUrl) {
       window.location.href = result.data.sessionUrl;
     } else if (!result.success && result.error) {
-      alert(result.error);
+      toast.error(result.error);
     }
     setIsLoading(false);
   }
@@ -38,6 +39,8 @@ export default function SubscriptionPage() {
 
     if (result.success && result.data?.sessionUrl) {
       window.location.href = result.data.sessionUrl;
+    } else if (!result.success && result.error) {
+      toast.error(result.error);
     }
     setIsLoading(false);
   }

@@ -48,7 +48,10 @@ export async function proxy(request: NextRequest) {
   if (
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/plants") ||
-    pathname.startsWith("/marketplace")
+    pathname.startsWith("/marketplace") ||
+    pathname.startsWith("/swap-requests") ||
+    pathname.startsWith("/subscription") ||
+    pathname.startsWith("/payments")
   ) {
     // User is authenticated, allow access
     return NextResponse.next();
