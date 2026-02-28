@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   let userId = session.metadata?.userId;
 
-  // Fallback for subscriptions where metadata might be in subscription_data
+  // Fallback for sub or session missing metadata
   if (!userId && session.mode === "subscription" && session.subscription) {
     const subscription = await stripe.subscriptions.retrieve(
       session.subscription as string
@@ -91,8 +91,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     userId = subscription.metadata?.userId;
   }
 
+  // Database fallback if still no userId
+  if (!userId && session.customer) {
+    const userByCustomer = await prisma.user.findUnique({
+      where: { stripeCustomerId: session.customer as string },
+      select: { id: true }
+    });
+    userId = userByCustomer?.id;
+  }
+
   if (!userId) {
-    console.error("No userId found in session or subscription metadata");
+    console.error("CRITICAL: No userId found in session, subscription, or database for customer:", session.customer);
     return;
   }
 
@@ -148,79 +157,109 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
   const subscriptionId = invoice.subscription as string;
   if (!subscriptionId) return;
 
-  // 1. Identify the User
-  let userId = invoice.subscription_details?.metadata?.userId;
-  let tier: string | undefined = invoice.subscription_details?.metadata?.tier;
+  // 1. Identify the User - Multiple Fallback Strategy
+  let userId = invoice.subscription_details?.metadata?.userId || (invoice as any).metadata?.userId;
+  const amountPaid = invoice.amount_paid; // in paise
 
-  // Fallback: Check all line items for Price IDs (Most reliable)
-  let foundTierFromPrice = false;
-  console.log(`Invoice lines count: ${invoice.lines.data.length}`);
+  console.log("========== WEBHOOK DEBUG START ==========");
+  console.log(`Invoice ID: ${invoice.id}, Subscription ID: ${subscriptionId}`);
+  console.log(`Initial UserId from metadata: ${userId || 'MISSING'}`);
+  console.log(`Amount Paid: ₹${amountPaid / 100}`);
 
+  // Fallback 1: Fetch from subscription object from Stripe
+  if (!userId && subscriptionId) {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      userId = subscription.metadata?.userId;
+      console.log(`UserId from subscription retrieve: ${userId || 'MISSING'}`);
+    } catch (err) {
+      console.error(`Error retrieving subscription ${subscriptionId}:`, err);
+    }
+  }
+
+  // Fallback 2: Find user in database by stripeSubscriptionId
+  if (!userId && subscriptionId) {
+    const userBySubscription = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { stripeSubscriptionId: subscriptionId },
+          { stripeCustomerId: invoice.customer as string }
+        ]
+      },
+      select: { id: true }
+    });
+    userId = userBySubscription?.id;
+    console.log(`UserId from database lookup: ${userId || 'MISSING'} (checked via subscriptionId or customerId)`);
+  }
+
+  // === TIER RESOLUTION WITH FULL DEBUG ===
+  console.log(`ENV YEARLY Price ID: "${SUBSCRIPTION_PRICES.YEARLY}"`);
+  console.log(`ENV MONTHLY Price ID: "${SUBSCRIPTION_PRICES.MONTHLY}"`);
+
+  let resolvedTier: string | undefined = undefined;
+  let resolutionMethod = "NONE";
+
+  // Step 1: Check Price IDs from invoice line items
   for (const line of invoice.lines.data) {
     const pId = line.price?.id;
-    console.log(`Checking line item price ID: ${pId}`);
-    if (pId === SUBSCRIPTION_PRICES.YEARLY) {
-      tier = "YEARLY";
-      foundTierFromPrice = true;
-      console.log("Matched YEARLY price ID");
+    console.log(`Invoice Line Price ID: "${pId}"`);
+
+    if (pId === SUBSCRIPTION_PRICES.YEARLY || pId === process.env.STRIPE_YEARLY_PRICE_ID) {
+      resolvedTier = "YEARLY";
+      resolutionMethod = "PRICE_ID";
       break;
-    } else if (pId === SUBSCRIPTION_PRICES.MONTHLY) {
-      tier = "MONTHLY";
-      foundTierFromPrice = true;
-      console.log("Matched MONTHLY price ID");
+    } else if (pId === SUBSCRIPTION_PRICES.MONTHLY || pId === process.env.STRIPE_MONTHLY_PRICE_ID) {
+      resolvedTier = "MONTHLY";
+      resolutionMethod = "PRICE_ID";
       break;
     }
   }
 
-  // Fallback: Fetch from subscription object if still missing userId
-  if (!userId) {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    userId = subscription.metadata?.userId;
-    if (!tier) tier = subscription.metadata?.tier;
+  // Step 2: Fallback to Metadata
+  if (!resolvedTier) {
+    const metaTier = invoice.subscription_details?.metadata?.tier || (invoice as any).metadata?.tier || (invoice.lines.data[0]?.metadata?.tier);
+    console.log(`Metadata tier from all locations: "${metaTier || 'MISSING'}"`);
+    resolvedTier = metaTier as string;
+    if (resolvedTier) resolutionMethod = "METADATA";
   }
 
-  const amountPaid = invoice.amount_paid; // in paise
-
-  // 1.5 Tier Resolution: Money is the source of truth
-  // ₹1000 = 100000 paise (Yearly)
-  // ₹300 = 30000 paise (Monthly)
-
-  if (amountPaid >= 90000) {
-    console.log("Amount matches YEARLY plan (>= ₹900). Setting tier to YEARLY.");
-    tier = "YEARLY";
-  } else if (amountPaid >= 25000 && amountPaid < 90000) {
-    console.log("Amount matches MONTHLY plan (>= ₹250). Setting tier to MONTHLY.");
-    tier = "MONTHLY";
+  // Step 3: Fallback to Amount (Multi-currency safe-ish ranges for INR)
+  if (!resolvedTier) {
+    console.log(`No tier from Price ID or Metadata. Using amount fallback: ${amountPaid}`);
+    // ₹1000 = 100,000 paise. (Yearly)
+    // ₹300 = 30,000 paise. (Monthly)
+    if (amountPaid >= 80000) {
+      resolvedTier = "YEARLY";
+      resolutionMethod = "AMOUNT";
+    } else if (amountPaid >= 20000) {
+      resolvedTier = "MONTHLY";
+      resolutionMethod = "AMOUNT";
+    }
   }
 
-  // If amount is ambiguous (e.g. a discount applied), fallback to metadata/Price IDs
-  if (!tier) {
-    console.log("Amount ambiguous, falling back to Metadata/Price ID resolution");
-    // (Existing tier resolution from lines 152-180 already populated 'tier' if possible)
-  }
-
-  console.log(`Final resolution: userId=${userId}, tier=${tier}, foundFromPrice=${foundTierFromPrice}, amountPaid=${amountPaid}`);
+  // Normalize tier to uppercase
+  const tier = resolvedTier?.toUpperCase();
+  console.log(`FINAL TIER Resolved: "${tier || 'UNKNOWN'}" (via: ${resolutionMethod})`);
+  console.log("========== WEBHOOK DEBUG END ==========")
 
   if (!userId || !tier) {
-    console.error(
-      "Critical: Could not find userId or tier for subscription fulfillment:",
-      { subscriptionId, userId, tier }
-    );
+    console.error("CRITICAL: Failed to resolve userId or tier after all fallbacks:", { userId, tier });
     return;
   }
 
-  // 2. Map Tiers to Credit Amounts
-  const creditsMap: Record<string, number> = {
-    YEARLY: 250,
-    MONTHLY: 20,
-  };
-
-  const creditsToAdd = creditsMap[tier.toUpperCase()];
-
-  if (!creditsToAdd) {
-    console.error(`No credit rule defined for tier: ${tier}`);
+  // Explicit credit assignment
+  let creditsToAdd: number;
+  if (tier === "YEARLY") {
+    creditsToAdd = 250;
+  } else if (tier === "MONTHLY") {
+    creditsToAdd = 20;
+  } else {
+    console.error(`Unknown tier "${tier}" - skipping credits`);
     return;
   }
+
+  console.log(`CREDITS TO ADD: ${creditsToAdd} for tier "${tier}"`);
+  console.log("========== WEBHOOK DEBUG END ==========")
 
   // 3. Prevent Double Crediting (Idempotency)
   const paymentIntentId = invoice.payment_intent as string;

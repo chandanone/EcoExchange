@@ -150,10 +150,18 @@ export const authConfig: NextAuthConfig = {
         token.credits = user.credits;
       }
 
-      // Handle session updates (e.g., credit changes)
-      if (trigger === "update" && session) {
-        token.credits = session.credits;
-        token.subscriptionTier = session.subscriptionTier;
+      // Always fetch the latest data from DB to keep session in sync
+      // This ensures webhook updates (credits, tier changes) are reflected immediately
+      if (token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { credits: true, subscriptionTier: true, role: true },
+        });
+        if (dbUser) {
+          token.credits = dbUser.credits;
+          token.subscriptionTier = dbUser.subscriptionTier;
+          token.role = dbUser.role;
+        }
       }
 
       return token;

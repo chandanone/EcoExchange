@@ -44,6 +44,11 @@ export async function createCreditTopUp(
       });
     }
 
+    let appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    if (!appUrl || appUrl.includes('undefined')) {
+      appUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+    }
+
     // Create Stripe Checkout Session for one-time payment
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
@@ -62,8 +67,8 @@ export async function createCreditTopUp(
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?credits_added=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?cancelled=true`,
+      success_url: `${appUrl}/dashboard?credits_added=true`,
+      cancel_url: `${appUrl}/dashboard?cancelled=true`,
       metadata: {
         userId: session.user.id,
         credits: packageDetails.credits.toString(),

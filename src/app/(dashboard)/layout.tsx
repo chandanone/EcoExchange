@@ -44,7 +44,7 @@ export default async function DashboardLayout({
   // Fetch the latest user data from DB to ensure credits are up to date
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { credits: true, role: true, name: true },
+    select: { credits: true, role: true, name: true, subscriptionTier: true },
   });
 
   if (!user) redirect("/login");

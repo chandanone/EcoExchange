@@ -26,6 +26,8 @@ export default function SubscriptionPage() {
 
     if (result.success && result.data?.sessionUrl) {
       window.location.href = result.data.sessionUrl;
+    } else if (!result.success && result.error) {
+      alert(result.error);
     }
     setIsLoading(false);
   }

@@ -25,11 +25,11 @@ export async function createSubscription(
     let stripeCustomerId = await prisma.user
       .findUnique({
         where: { id: session.user.id },
-        select: { stripeCustomerId: true },
+        select: { stripeCustomerId: true, stripeSubscriptionId: true },
       })
-      .then((user) => user?.stripeCustomerId);
+      .then((user) => ({ customerId: user?.stripeCustomerId, subscriptionId: user?.stripeSubscriptionId }));
 
-    if (!stripeCustomerId) {
+    if (!stripeCustomerId?.customerId) {
       const customer = await stripe.customers.create({
         email: session.user.email!,
         name: session.user.name || undefined,
@@ -38,12 +38,47 @@ export async function createSubscription(
         },
       });
 
-      stripeCustomerId = customer.id;
-
       await prisma.user.update({
         where: { id: session.user.id },
-        data: { stripeCustomerId },
+        data: { stripeCustomerId: customer.id },
       });
+
+      stripeCustomerId = { customerId: customer.id, subscriptionId: null };
+    }
+
+    // Handle existing subscription
+    let newSubStartTimestamp: number | undefined = undefined;
+
+    if (stripeCustomerId.subscriptionId) {
+      try {
+        const existingSub = await stripe.subscriptions.retrieve(stripeCustomerId.subscriptionId);
+
+        if (existingSub.status === "active" || existingSub.status === "trialing") {
+          // Check what tier the existing subscription is
+          const existingPriceId = existingSub.items.data[0]?.price?.id;
+          const requestedPriceId = validatedData.tier === "MONTHLY"
+            ? SUBSCRIPTION_PRICES.MONTHLY
+            : SUBSCRIPTION_PRICES.YEARLY;
+
+          // Block if user already has the same plan
+          if (existingPriceId === requestedPriceId) {
+            return {
+              success: false,
+              error: `You already have an active ${validatedData.tier.toLowerCase()} subscription.`,
+            };
+          }
+
+          // Switching to a different tier: let current plan finish, then start new one
+          await stripe.subscriptions.update(stripeCustomerId.subscriptionId, {
+            cancel_at_period_end: true,
+          });
+          console.log(`Existing subscription set to cancel at period end: ${new Date(existingSub.current_period_end * 1000).toISOString()}`);
+
+          newSubStartTimestamp = existingSub.current_period_end;
+        }
+      } catch (err) {
+        console.log("Could not retrieve existing subscription, proceeding with new one");
+      }
     }
 
     // Create Stripe Checkout Session
@@ -52,10 +87,17 @@ export async function createSubscription(
         ? SUBSCRIPTION_PRICES.MONTHLY
         : SUBSCRIPTION_PRICES.YEARLY;
 
-    console.log(`Creating subscription session: tier=${validatedData.tier}, priceId=${priceId}`);
+    let appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+
+    // Explicit safety check: some environments might return '"undefined"' or actual undefined
+    if (!appUrl || appUrl.includes('undefined')) {
+      appUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+    }
+
+    console.log(`Creating subscription session: tier=${validatedData.tier}, priceId=${priceId}, appUrl=${appUrl}`);
 
     const checkoutSession = await stripe.checkout.sessions.create({
-      customer: stripeCustomerId,
+      customer: stripeCustomerId.customerId!,
       mode: "subscription",
       payment_method_types: ["card"],
       line_items: [
@@ -64,10 +106,11 @@ export async function createSubscription(
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription?cancelled=true`,
+      success_url: `${appUrl}/subscription?success=true`,
+      cancel_url: `${appUrl}/subscription?cancelled=true`,
       metadata: {
         userId: session.user.id,
+        tier: validatedData.tier,
       },
       // CRITICAL: Metadata for the Subscription (recurring use)
       // This ensures invoice.paid always knows which userId to credit
@@ -76,6 +119,9 @@ export async function createSubscription(
           userId: session.user.id,
           tier: validatedData.tier,
         },
+        // If there's an existing sub, defer billing until it expires
+        // trial_end means "don't charge until this date"
+        ...(newSubStartTimestamp ? { trial_end: newSubStartTimestamp } : {}),
       },
     });
 
