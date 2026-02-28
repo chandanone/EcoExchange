@@ -82,3 +82,15 @@ export interface ActionResponse<T = unknown> {
   data?: T;
   error?: string;
 }
+
+export interface PaymentHistoryRecord {
+  id: string;
+  userId: string;
+  amount: number;
+  type: string;
+  description: string | null;
+  stripePaymentIntentId: string | null;
+  validityStart: Date | null;
+  validityEnd: Date | null;
+  createdAt: Date;
+}

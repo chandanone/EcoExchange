@@ -5,10 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Package, ShoppingBag, CreditCard, TrendingUp } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const session = await auth();
 
-  const [myPlantsCount, pendingSwaps, approvedPlants] = await Promise.all([
+  // Fetch the latest user data from DB to ensure credits and tier are up to date
+  const [user, myPlantsCount, pendingSwaps, approvedPlants] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session!.user.id },
+      select: { credits: true, subscriptionTier: true, name: true }
+    }),
     prisma.plant.count({
       where: { donorId: session!.user.id },
     }),
@@ -25,10 +32,12 @@ export default async function DashboardPage() {
     }),
   ]);
 
+  if (!user) return null;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Welcome back, {session!.user.name}!</h1>
+        <h1 className="text-3xl font-bold">Welcome back, {user.name}!</h1>
         <p className="mt-2 text-gray-600">Here's what's happening with your plant collection</p>
       </div>
 
@@ -40,7 +49,7 @@ export default async function DashboardPage() {
             <CreditCard className="h-4 w-4 text-gray-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{session!.user.credits}</div>
+            <div className="text-2xl font-bold">{user.credits}</div>
             <p className="text-xs text-gray-600">Ready to swap</p>
           </CardContent>
         </Card>
@@ -127,18 +136,18 @@ export default async function DashboardPage() {
           <CardTitle>Subscription Status</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between">
+          <div className="items-center flex justify-between">
             <div>
               <p className="font-semibold">
-                Current Plan: <span className="text-primary">{session!.user.subscriptionTier}</span>
+                Current Plan: <span className="text-primary">{user.subscriptionTier}</span>
               </p>
               <p className="text-sm text-gray-600">
-                {session!.user.subscriptionTier === 'FREE'
+                {user.subscriptionTier === 'FREE'
                   ? 'Upgrade to get more credits and exclusive features'
                   : 'Thank you for being a premium member!'}
               </p>
             </div>
-            {session!.user.subscriptionTier === 'FREE' && (
+            {user.subscriptionTier === 'FREE' && (
               <Link href="/subscription">
                 <Button>Upgrade</Button>
               </Link>

@@ -5,6 +5,7 @@ import { prisma } from "./db";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { Role, SubscriptionTier } from "@prisma/client";
+import { PrismaAdapter } from "@auth/prisma-adapter";
 
 // Extend default session types
 declare module "next-auth" {
@@ -39,6 +40,7 @@ const credentialsSchema = z.object({
 });
 
 export const authConfig: NextAuthConfig = {
+  adapter: PrismaAdapter(prisma) as any,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID! as string,
@@ -91,6 +93,20 @@ export const authConfig: NextAuthConfig = {
       },
     }),
   ],
+  // Add this block
+  events: {
+    async createUser({ user }) {
+      // When a user is created via Google/OAuth, set default values
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          role: "USER",
+          subscriptionTier: "FREE",
+          credits: 5, // Match your manual registration starting credits
+        },
+      });
+    },
+  },
   session: {
     strategy: "jwt",
   },
@@ -99,6 +115,31 @@ export const authConfig: NextAuthConfig = {
     error: "/login",
   },
   callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        // Check if this specific user needs their "starter pack"
+        const dbUser = await prisma.user.findUnique({
+          where: { email: user.email! },
+        });
+
+        // If user exists but has no tier or 0 credits, initialize them
+        if (dbUser && (dbUser.credits === 0 || !dbUser.subscriptionTier)) {
+          await prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+              credits: dbUser.credits === 0 ? 5 : dbUser.credits,
+              subscriptionTier: dbUser.subscriptionTier || "FREE",
+              role: dbUser.role || "USER",
+            },
+          });
+
+          // Update the 'user' object in memory so the JWT callback gets the new data
+          user.credits = 5;
+          user.subscriptionTier = "FREE";
+        }
+      }
+      return true;
+    },
     async jwt({ token, user, trigger, session }) {
       if (user) {
         if (user.id) {
@@ -109,10 +150,18 @@ export const authConfig: NextAuthConfig = {
         token.credits = user.credits;
       }
 
-      // Handle session updates (e.g., credit changes)
-      if (trigger === "update" && session) {
-        token.credits = session.credits;
-        token.subscriptionTier = session.subscriptionTier;
+      // Always fetch the latest data from DB to keep session in sync
+      // This ensures webhook updates (credits, tier changes) are reflected immediately
+      if (token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { credits: true, subscriptionTier: true, role: true },
+        });
+        if (dbUser) {
+          token.credits = dbUser.credits;
+          token.subscriptionTier = dbUser.subscriptionTier;
+          token.role = dbUser.role;
+        }
       }
 
       return token;

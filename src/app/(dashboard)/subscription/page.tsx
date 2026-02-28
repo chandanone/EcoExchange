@@ -11,14 +11,29 @@ import {
   CardContent,
   CardFooter,
 } from "@/components/ui/card";
-import { createSubscription } from "@/actions/subscription-actions";
+import { createSubscription, getSubscriptionDetails } from "@/actions/subscription-actions";
 import { createCreditTopUp } from "@/actions/credit-actions";
 import { Badge } from "@/components/ui/badge";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useEffect } from "react";
 
 export default function SubscriptionPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [isPageLoading, setIsPageLoading] = useState(true);
+  const [currentTier, setCurrentTier] = useState<string>("FREE");
+
+  useEffect(() => {
+    async function loadSubscription() {
+      const result = await getSubscriptionDetails();
+      if (result.success && result.data) {
+        setCurrentTier(result.data.tier);
+      }
+      setIsPageLoading(false);
+    }
+    loadSubscription();
+  }, []);
 
   async function handleSubscribe(tier: "MONTHLY" | "YEARLY") {
     setIsLoading(true);
@@ -26,6 +41,8 @@ export default function SubscriptionPage() {
 
     if (result.success && result.data?.sessionUrl) {
       window.location.href = result.data.sessionUrl;
+    } else if (!result.success && result.error) {
+      toast.error(result.error);
     }
     setIsLoading(false);
   }
@@ -36,8 +53,18 @@ export default function SubscriptionPage() {
 
     if (result.success && result.data?.sessionUrl) {
       window.location.href = result.data.sessionUrl;
+    } else if (!result.success && result.error) {
+      toast.error(result.error);
     }
     setIsLoading(false);
+  }
+
+  if (isPageLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (
@@ -53,7 +80,7 @@ export default function SubscriptionPage() {
       <section className="mb-12">
         <h2 className="mb-6 text-2xl font-bold">Subscription Plans</h2>
         <div className="grid gap-6 md:grid-cols-3">
-          <Card>
+          <Card className={currentTier === 'FREE' ? 'border-2 border-primary shadow-sm' : ''}>
             <CardHeader>
               <CardTitle>Free</CardTitle>
               <CardDescription>Perfect for getting started</CardDescription>
@@ -79,16 +106,20 @@ export default function SubscriptionPage() {
               </ul>
             </CardContent>
             <CardFooter>
-              <Button variant="outline" className="w-full" disabled>
-                Current Plan
+              <Button variant="outline" className="w-full" disabled={currentTier === 'FREE'}>
+                {currentTier === 'FREE' ? 'Current Plan' : 'Free Tier Active'}
               </Button>
             </CardFooter>
           </Card>
 
-          <Card className="border-2 border-primary">
-            <div className="absolute -top-4 left-1/2 -translate-x-1/2"></div>
+          <Card className={currentTier === 'MONTHLY' ? 'border-2 border-primary shadow-sm relative' : 'relative'}>
+            {currentTier === 'MONTHLY' && (
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                <Badge variant="default" className="bg-primary text-white">Current Plan</Badge>
+              </div>
+            )}
             <CardHeader>
-              <Badge>Most Popular</Badge>
+              <Badge variant="secondary" className="w-fit mb-2">Most Popular</Badge>
               <CardTitle>Monthly</CardTitle>
               <CardDescription>For active swappers</CardDescription>
             </CardHeader>
@@ -120,14 +151,20 @@ export default function SubscriptionPage() {
               <Button
                 className="w-full"
                 onClick={() => handleSubscribe("MONTHLY")}
-                disabled={isLoading}
+                disabled={isLoading || currentTier === "MONTHLY"}
+                variant={currentTier === "MONTHLY" ? "outline" : "default"}
               >
-                Subscribe
+                {currentTier === "MONTHLY" ? "Active" : "Subscribe"}
               </Button>
             </CardFooter>
           </Card>
 
-          <Card>
+          <Card className={currentTier === 'YEARLY' ? 'border-2 border-primary shadow-sm relative' : 'relative'}>
+            {currentTier === 'YEARLY' && (
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                <Badge variant="default" className="bg-primary text-white">Current Plan</Badge>
+              </div>
+            )}
             <CardHeader>
               <CardTitle>Yearly</CardTitle>
               <CardDescription>Best value</CardDescription>
@@ -160,9 +197,10 @@ export default function SubscriptionPage() {
               <Button
                 className="w-full"
                 onClick={() => handleSubscribe("YEARLY")}
-                disabled={isLoading}
+                disabled={isLoading || currentTier === "YEARLY"}
+                variant={currentTier === "YEARLY" ? "outline" : "default"}
               >
-                Subscribe
+                {currentTier === "YEARLY" ? "Active" : "Subscribe"}
               </Button>
             </CardFooter>
           </Card>

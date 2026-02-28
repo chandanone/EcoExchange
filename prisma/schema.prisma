@@ -184,6 +184,8 @@ model CreditTransaction {
   type                  String // SUBSCRIPTION, TOP_UP, SWAP_DEDUCTION, REFUND
   description           String?
   stripePaymentIntentId String? @unique
+  validityStart         DateTime?
+  validityEnd           DateTime?
 
   createdAt DateTime @default(now())
 

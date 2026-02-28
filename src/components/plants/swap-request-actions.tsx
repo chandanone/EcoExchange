@@ -13,7 +13,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { ActionResponse } from "@/types";
 import { updateSwapRequest } from "@/actions/swap-actions";
+import { toast } from "sonner";
 import { Check, X } from "lucide-react";
 
 interface SwapRequestActionsProps {
@@ -31,12 +33,10 @@ export default function SwapRequestActions({
     "ACCEPTED"
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
 
     const formData = new FormData(e.currentTarget);
     const ownerNotes = formData.get("ownerNotes") as string;
@@ -49,9 +49,10 @@ export default function SwapRequestActions({
 
     if (result.success) {
       setIsOpen(false);
+      toast.success(`Swap request ${action.toLowerCase()} successfully`);
       router.refresh();
     } else {
-      setError(result.error || "Failed to update swap request");
+      toast.error(result.error || `Failed to ${action.toLowerCase()} swap request`);
     }
 
     setIsLoading(false);
@@ -60,7 +61,6 @@ export default function SwapRequestActions({
   function openDialog(actionType: "ACCEPTED" | "REJECTED" | "CANCELLED") {
     setAction(actionType);
     setIsOpen(true);
-    setError("");
   }
 
   if (isOwner) {
@@ -99,11 +99,6 @@ export default function SwapRequestActions({
               </DialogHeader>
 
               <div className="my-6 space-y-4">
-                {error && (
-                  <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                    {error}
-                  </div>
-                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="ownerNotes">
@@ -154,8 +149,8 @@ export default function SwapRequestActions({
                   {isLoading
                     ? "Processing..."
                     : action === "ACCEPTED"
-                    ? "Accept Request"
-                    : "Reject Request"}
+                      ? "Accept Request"
+                      : "Reject Request"}
                 </Button>
               </DialogFooter>
             </form>
@@ -186,13 +181,7 @@ export default function SwapRequestActions({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="my-6">
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
-          </div>
+          <div className="my-6" />
 
           <DialogFooter>
             <Button
