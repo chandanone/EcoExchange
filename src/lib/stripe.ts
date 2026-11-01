@@ -9,6 +9,8 @@ const STRIPE_PLACEHOLDER_PRICE_IDS = new Set(["price_monthly", "price_yearly"]);
 function getRequiredStripeEnv(name: string): string {
   const value = process.env[name]?.trim();
 
+  // Reject blank or placeholder values before checkout is created.
+  // This prevents silent Stripe failures when env vars are not configured in production.
   if (!value) {
     throw new Error(
       `Missing Stripe environment variable: ${name}. Add it to your environment before starting the app.`
@@ -40,6 +42,7 @@ export function resolveSubscriptionPriceId(
   const priceId =
     tier === "MONTHLY" ? SUBSCRIPTION_PRICES.MONTHLY : SUBSCRIPTION_PRICES.YEARLY;
 
+  // Guard against misconfigured Stripe envs and stop the checkout flow early.
   if (!priceId || STRIPE_PLACEHOLDER_PRICE_IDS.has(priceId)) {
     throw new Error(
       `Stripe ${tier.toLowerCase()} price is not configured. Check STRIPE_${tier}_PRICE_ID in your environment.`

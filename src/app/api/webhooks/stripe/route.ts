@@ -250,6 +250,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     return;
   }
 
+  // Prefer Stripe subscription metadata over invoice heuristics to avoid wrong tier assignment.
   const tier =
     (await resolveTierForSubscription(subscriptionId)) ||
     normalizeTier((invoice as any).metadata?.tier) ||
@@ -329,6 +330,8 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   if (!user) return;
 
+  // Treat subscription lifecycle as the source of truth for plan status.
+  // Canceled/unpaid/incomplete states must not leave the user marked as active.
   const isCanceled =
     subscription.status === "canceled" ||
     subscription.status === "unpaid" ||
