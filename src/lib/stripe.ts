@@ -4,18 +4,50 @@ if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error("STRIPE_SECRET_KEY is not set");
 }
 
+const PLACEHOLDER_PRICE_IDS = new Set(["price_monthly", "price_yearly"]);
+
+function getRequiredStripeEnv(name: string) {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(
+      `Missing Stripe environment variable: ${name}. Add it to your environment before starting the app.`
+    );
+  }
+
+  if (PLACEHOLDER_PRICE_IDS.has(value)) {
+    throw new Error(
+      `Placeholder Stripe price ID detected for ${name}. Replace it with a real Stripe Price ID.`
+    );
+  }
+
+  return value;
+}
+
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-02-24.acacia",
   typescript: true,
 });
 
-// Subscription price IDs (set these in Stripe Dashboard)
 export const SUBSCRIPTION_PRICES = {
-  MONTHLY: process.env.STRIPE_MONTHLY_PRICE_ID || "price_monthly",
-  YEARLY: process.env.STRIPE_YEARLY_PRICE_ID || "price_yearly",
+  MONTHLY: getRequiredStripeEnv("STRIPE_MONTHLY_PRICE_ID"),
+  YEARLY: getRequiredStripeEnv("STRIPE_YEARLY_PRICE_ID"),
 } as const;
 
-// Credit top-up amounts (in INR)
+export function ensureSubscriptionPriceConfigured(
+  tier: "MONTHLY" | "YEARLY"
+): string {
+  const priceId = tier === "MONTHLY" ? SUBSCRIPTION_PRICES.MONTHLY : SUBSCRIPTION_PRICES.YEARLY;
+
+  if (!priceId || PLACEHOLDER_PRICE_IDS.has(priceId)) {
+    throw new Error(
+      `Stripe ${tier.toLowerCase()} price is not configured. Check STRIPE_${tier}_PRICE_ID in your environment.`
+    );
+  }
+
+  return priceId;
+}
+
 export const CREDIT_PACKAGES = {
   SMALL: { credits: 10, amount: 10000 }, // ₹100
   MEDIUM: { credits: 25, amount: 20000 }, // ₹200
