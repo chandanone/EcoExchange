@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { stripe, SUBSCRIPTION_PRICES } from "@/lib/stripe";
+import { stripe, SUBSCRIPTION_PRICES, resolveSubscriptionPriceId } from "@/lib/stripe";
 import {
   createSubscriptionSchema,
   type CreateSubscriptionInput,
@@ -20,14 +20,17 @@ export async function createSubscription(
     }
 
     const validatedData = createSubscriptionSchema.parse(input);
+    const priceId = resolveSubscriptionPriceId(validatedData.tier);
 
-    // Get or create Stripe customer
     let stripeCustomerId = await prisma.user
       .findUnique({
         where: { id: session.user.id },
         select: { stripeCustomerId: true, stripeSubscriptionId: true },
       })
-      .then((user) => ({ customerId: user?.stripeCustomerId, subscriptionId: user?.stripeSubscriptionId }));
+      .then((user) => ({
+        customerId: user?.stripeCustomerId,
+        subscriptionId: user?.stripeSubscriptionId,
+      }));
 
     if (!stripeCustomerId?.customerId) {
       const customer = await stripe.customers.create({
@@ -46,36 +49,33 @@ export async function createSubscription(
       stripeCustomerId = { customerId: customer.id, subscriptionId: null };
     }
 
-    // Handle existing subscription
     let newSubStartTimestamp: number | undefined = undefined;
 
     if (stripeCustomerId.subscriptionId) {
       try {
-        const existingSub = await stripe.subscriptions.retrieve(stripeCustomerId.subscriptionId);
+        const existingSub = await stripe.subscriptions.retrieve(
+          stripeCustomerId.subscriptionId
+        );
 
         if (existingSub.status === "active" || existingSub.status === "trialing") {
-          // Check what tier the existing subscription is
           const existingPriceId = existingSub.items.data[0]?.price?.id;
-          const requestedPriceId = validatedData.tier === "MONTHLY"
-            ? SUBSCRIPTION_PRICES.MONTHLY
-            : SUBSCRIPTION_PRICES.YEARLY;
+          const requestedPriceId = priceId;
 
-          // Block if user already has the same plan
           const isExistingYearly = existingPriceId === SUBSCRIPTION_PRICES.YEARLY;
           const currentEnd = existingSub.current_period_end * 1000;
           const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
-          const isLastMonth = (currentEnd - Date.now()) <= thirtyDaysInMs;
+          const isLastMonth = currentEnd - Date.now() <= thirtyDaysInMs;
 
-          // NEW STRICT POLICY: If you are on Yearly, you can't buy ANYTHING until last 30 days
           if (isExistingYearly && !isLastMonth) {
-            const daysLeft = Math.ceil((currentEnd - Date.now()) / (1000 * 60 * 60 * 24));
+            const daysLeft = Math.ceil(
+              (currentEnd - Date.now()) / (1000 * 60 * 60 * 24)
+            );
             return {
               success: false,
               error: `You have an active Yearly plan with ${daysLeft} days left. You can change or renew your plan only during the last 30 days.`,
             };
           }
 
-          // Block if user already has the exact same plan (for Monthly)
           if (existingPriceId === requestedPriceId) {
             return {
               success: false,
@@ -83,11 +83,9 @@ export async function createSubscription(
             };
           }
 
-          // Switching to a different tier: let current plan finish, then start new one
           await stripe.subscriptions.update(stripeCustomerId.subscriptionId, {
             cancel_at_period_end: true,
           });
-          console.log(`Existing subscription set to cancel at period end: ${new Date(existingSub.current_period_end * 1000).toISOString()}`);
 
           newSubStartTimestamp = existingSub.current_period_end;
         }
@@ -96,20 +94,15 @@ export async function createSubscription(
       }
     }
 
-    // Create Stripe Checkout Session
-    const priceId =
-      validatedData.tier === "MONTHLY"
-        ? SUBSCRIPTION_PRICES.MONTHLY
-        : SUBSCRIPTION_PRICES.YEARLY;
+    let appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
-    let appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-
-    // Explicit safety check: some environments might return '"undefined"' or actual undefined
-    if (!appUrl || appUrl.includes('undefined')) {
-      appUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+    if (!appUrl || appUrl.includes("undefined")) {
+      appUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000";
     }
-
-    console.log(`Creating subscription session: tier=${validatedData.tier}, priceId=${priceId}, appUrl=${appUrl}`);
 
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: stripeCustomerId.customerId!,
@@ -127,15 +120,11 @@ export async function createSubscription(
         userId: session.user.id,
         tier: validatedData.tier,
       },
-      // CRITICAL: Metadata for the Subscription (recurring use)
-      // This ensures invoice.paid always knows which userId to credit
       subscription_data: {
         metadata: {
           userId: session.user.id,
           tier: validatedData.tier,
         },
-        // If there's an existing sub, defer billing until it expires
-        // trial_end means "don't charge until this date"
         ...(newSubStartTimestamp ? { trial_end: newSubStartTimestamp } : {}),
       },
     });
@@ -268,9 +257,13 @@ export async function createBillingPortalSession(): Promise<
       return { success: false, error: "No Stripe customer found" };
     }
 
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: user.stripeCustomerId,
-      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription`,
+      return_url: `${appUrl}/subscription`,
     });
 
     return {

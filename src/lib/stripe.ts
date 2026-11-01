@@ -4,10 +4,10 @@ if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error("STRIPE_SECRET_KEY is not set");
 }
 
-const PLACEHOLDER_PRICE_IDS = new Set(["price_monthly", "price_yearly"]);
+const STRIPE_PLACEHOLDER_PRICE_IDS = new Set(["price_monthly", "price_yearly"]);
 
-function getRequiredStripeEnv(name: string) {
-  const value = process.env[name];
+function getRequiredStripeEnv(name: string): string {
+  const value = process.env[name]?.trim();
 
   if (!value) {
     throw new Error(
@@ -15,7 +15,7 @@ function getRequiredStripeEnv(name: string) {
     );
   }
 
-  if (PLACEHOLDER_PRICE_IDS.has(value)) {
+  if (STRIPE_PLACEHOLDER_PRICE_IDS.has(value)) {
     throw new Error(
       `Placeholder Stripe price ID detected for ${name}. Replace it with a real Stripe Price ID.`
     );
@@ -34,12 +34,13 @@ export const SUBSCRIPTION_PRICES = {
   YEARLY: getRequiredStripeEnv("STRIPE_YEARLY_PRICE_ID"),
 } as const;
 
-export function ensureSubscriptionPriceConfigured(
+export function resolveSubscriptionPriceId(
   tier: "MONTHLY" | "YEARLY"
 ): string {
-  const priceId = tier === "MONTHLY" ? SUBSCRIPTION_PRICES.MONTHLY : SUBSCRIPTION_PRICES.YEARLY;
+  const priceId =
+    tier === "MONTHLY" ? SUBSCRIPTION_PRICES.MONTHLY : SUBSCRIPTION_PRICES.YEARLY;
 
-  if (!priceId || PLACEHOLDER_PRICE_IDS.has(priceId)) {
+  if (!priceId || STRIPE_PLACEHOLDER_PRICE_IDS.has(priceId)) {
     throw new Error(
       `Stripe ${tier.toLowerCase()} price is not configured. Check STRIPE_${tier}_PRICE_ID in your environment.`
     );
